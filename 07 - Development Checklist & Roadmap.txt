@@ -1,0 +1,87 @@
+This document outlines the development plan for the AVAR Assistant application, following a **"Depth-First"** feature completion strategy. We will focus on one module at a time, completing all of its required functionality before moving to the next.
+
+## **Phase 1: Application Skeleton**
+
+* \[ \] **Basic Project Setup**: Create the initial Vite + React project, install Tailwind CSS, and get a blank page showing.
+* \[ \] **XState Machine Skeleton**: Create the main matchMachine.ts file. This would involve defining all the high-level states (PRE_MATCH, FIRST_HALF, HALF_TIME, etc.) but with no actions or logic inside them yet.
+* \[ \] **Web Worker Setup**: Create the timerWorker.ts file and establish the basic communication channel so the state machine can send messages to it.
+* \[ \] **IndexedDB Setup**: Create the database.ts file using Dexie.js and define the database schema (e.g., an "events" table).
+* \[ \] **Connect the UI to the State**: Wire up a basic React component to the XState machine so it can display the current match state (e.g., just show the text "Current State: FIRST_HALF").
+
+## **Phase 2: Feature Implementation & Polish**
+
+### **Module 1: Match Clock & Controls**
+
+* \[ \] **Dynamic Button Text**: Button text changes based on the current match phase.  
+* \[ \] **Live Clock**: The main clock is connected to the Web Worker and accurately displays time.  
+* \[ \] **Pause/Resume Logic**: The PAUSE/CONTINUE buttons correctly stop and start the main match clock.  
+* \[ \] **Correct Starting Times**: The clock correctly resets to 45:00, 90:00, etc., for each new phase.  
+* \[ \] **Paused Visual State**: The clock's appearance changes when the match is paused.  
+* \[ \] **Manual Adjustment**: The \+1s/-1s and \+1m/-1m buttons are functional in "Live Edit" mode.  
+* \[ \] **End-of-Half Logic**: The clock automatically stops when the MAIN button is pressed to end a half.
+
+### **Module 2: Stoppage System**
+
+* \[ \] **Core Control**: The "BALL OUT OF PLAY" / "BALL BACK IN PLAY" button is functional.  
+* \[ \] **Live Stoppage Timer**: The "Accurate Time" display correctly tracks stoppage time.  
+* \[ \] **Reasons UI**: The grid of reason buttons appears and is connected to the state machine.  
+* \[ \] **Rounded Time Display**: The "Announced Added Time" is correctly calculated and displayed.  
+* \[ \] **Freeze Logic**: The announced time freezes at the end of a half.  
+* \[ \] **Added Time in Added Time**: The secondary counter is implemented.  
+* \[ \] **Stoppage Timer Adjustment**: \+1s and \-1s buttons to adjust an active stoppage timer.  
+* \[ \] **Stoppage at Half-End**: A running stoppage is automatically stopped and logged when a half ends.
+
+### **Module 3: Booking Module**
+
+* \[ \] **Dynamic Player/Team Selection**: The UI correctly displays rosters and allows selection.  
+* \[ \] **Core Save Logic**: The "Save" button correctly dispatches a CARD\_ISSUED event.  
+* \[ \] **Second Yellow Logic**: The system correctly identifies a second yellow, dismisses the player, and updates the UI.  
+* \[ \] **Staff Bookings**: The UI and logic for booking non-player staff members are implemented.  
+* \[ \] **Mistaken Identity Workflow**: Implement the dedicated UI in the VAR module for correcting a booking.
+
+### **Module 4: Substitution Module**
+
+* \[ \] **Dynamic Player/Team Selection**: The UI correctly displays rosters and allows selection.  
+* \[ \] **Core Save Logic**: The "Save" button correctly dispatches a SUBSTITUTION\_MADE event.  
+* \[ \] **Counter Display**: The UI correctly displays the number of subs and windows used vs. the maximum allowed.  
+* \[ \] **Concussion Sub Logic**: The logic for handling concussion subs is implemented.  
+* \[ \] **"Free Windows" Logic**: Implement the rule where half-time substitutions do not use a substitution window.
+
+### **Module 5: Goal Module**
+
+* \[ \] **Dynamic Player/Team Selection**: The UI correctly displays rosters and allows selection.  
+* \[ \] **Core Save Logic**: The "Save" button correctly dispatches a GOAL\_SCORED event.  
+* \[ \] **"Own Goal" Logic**: Implement the UI and logic for logging an own goal.  
+* \[ \] **"Unknown Scorer" Logic**: Implement the UI and logic for logging a goal with an unknown scorer.
+
+### **Module 6: VAR Module**
+
+* \[ \] **Static UI & Core Logic**: The UI and tab are in place, and buttons dispatch a VAR\_OUTCOME event.  
+* \[ \] **"Mistaken Identity" Interface**: Build the dedicated UI for the mistaken identity workflow.
+
+### **Module 7: Penalty Shootout Module**
+
+* \[ \] **Static UI & Core Logic**: The UI is in place, and the score updates correctly.  
+* \[ \] **Guided Process**: Implement the full guided workflow, including tracking whose turn it is.  
+* \[ \] **"Reduce-to-Equalize" Rule**: Implement the UI and logic for this rule.  
+* \[ \] **Automatic Winner Declaration**: Implement the logic to automatically end the shootout when a winner is mathematically certain.
+
+### **Module 8: Live Edit & Final Report**
+
+* \[ \] **Mode Toggle**: The FAB correctly toggles "Live Edit" mode.  
+* \[ \] **Event Log Display**: The log correctly displays events in edit mode.  
+* \[ \] **Event Reversal**: The "Reverse" functionality for events is working correctly.  
+* \[ \] **Event Editing (Bookings)**: The full edit-and-save loop for bookings is functional.  
+* \[ \] **JSON Report**: The JSON report generation is functional.  
+* \[ \] **PDF Report (Basic)**: A basic PDF with some data is generated.  
+* \[ \] **PDF Report (Complete)**: The PDF report needs to be expanded to include all the detailed data required by the functional specification.
+
+### **Module 9: Match Summary**
+
+* \[ \] **Display Current Score**: Show the live score for both teams.  
+* \[ \] **Display Goalscorers**: Show a running list of goalscorers.  
+* \[ \] **Display Card & Sub Tallies**: Show the counts for cards and substitutions.  
+* \[ \] **Display Live Player Status**: Implement the dynamic list of players with event icons (goals, cards, subs).  
+* \[ \] **Display Match Phase**: Show the current phase (e.g., "FIRST HALF").  
+* \[ \] **Display Stoppage Summary**: Show a live log of the last few stoppages.  
+* \[ \] **Display Rule Alerts**: Implement the area for non-blocking warnings.

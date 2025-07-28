@@ -1,0 +1,40 @@
+# **02 \- Project Workflow (Automated)**
+
+This document outlines the architecture for the semi-autonomous, agentic workflow we will build and use for the AVAR Assistant project. This is our definitive plan.
+
+## **1\. Core Principle: Automation & Supervision**
+
+Our workflow is designed to automate the repetitive and error-prone tasks of software development, elevating the Project Manager's role from a manual operator to a high-level supervisor and final validator. The system is built on a "Single Pane of Glass" concept, using the Git repository as the "shared brain" and a series of automated agents to perform tasks.
+
+## **2\. The Automated Development Pipeline**
+
+The process is a phased, automated pipeline orchestrated by a workflow automation tool (e.g., Google Cloud Workflows) and powered by Google Cloud's AI services.
+
+### **1: Automated Knowledge Management (The "Shared Brain")**
+
+* **Goal**: To create a dynamic, always up-to-date, and queryable knowledge base from our docs folder.  
+* **Implementation**: We will build a **Retrieval-Augmented Generation (RAG) Pipeline** using **Vertex AI Search**.  
+* **Process**: A CI/CD pipeline (e.g., a GitHub Action) will automatically trigger on every commit to our docs. It will ingest, chunk, and embed our documentation into a **Vertex AI Vector Search** index. This ensures our AI agents always have access to the latest, definitive project knowledge.
+
+### **2: Automated Task Execution & Feedback**
+
+* **Goal**: To automate the process of code generation, review, and documentation updates.  
+* **Implementation**: We will use a combination of the **Gemini API** and **GitHub Actions**.  
+* **Process**:  
+  1. **Task Initiation**: A new task in a project management tool will trigger our main **Google Cloud Workflow**.  
+  2. **Brief Generation**: The workflow calls the **Gemini API** (acting as the "PM Assistant") to generate a hyper-focused .ai/task\_brief.md.  
+  3. **Code Generation**: The workflow then calls the **Gemini API** again (acting as the "Coder AI"), providing it with the brief and context retrieved from our RAG pipeline. The Coder's output is to automatically create a new GitHub Pull Request (PR) with the generated code.  
+  4. **AI-Powered Review**: The creation of the PR triggers a new **GitHub Action**. This "AI Reviewer" agent uses the RAG pipeline to get context, performs a code review, and posts its analysisâ€”including a formal **"Change Proposal"** for our documentationâ€”as a comment on the PR.
+
+### **3: Human Supervision & Finalization**
+
+* **Goal**: To ensure the PM has final, high-level control and to close the loop by updating the "Shared Brain."  
+* **Implementation**: This is the human-in-the-loop step.  
+* **Process**:  
+  1. **Notification**: The Google Cloud Workflow sends a single notification to you, the PM, with a link to the PR, which now contains the code and the AI's own review.  
+  2. **Supervisory Review**: Your role is to perform a high-level validation: Does this meet the product vision? Is the AI's review sensible?  
+  3. **The "Merge"**: If you approve, you merge the PR. This merge action does two things:  
+     * It updates the application's codebase.  
+     * It triggers the RAG pipeline from Phase 1, which automatically updates the "Shared Brain" with the new documentation changes. The system is now ready for the next task.
+
+This is our new, definitive plan. It is ambitious, innovative, and directly aligned with your decision to build a truly modern, automated development system.

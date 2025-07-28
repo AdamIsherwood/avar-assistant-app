@@ -1,0 +1,27 @@
+This document outlines the foundational principles that govern every aspect of the AVAR Assistant's design and implementation. These are the core philosophies of the project.
+
+## **1\. Architectural Philosophy**
+
+These principles guide the structure and behavior of the software itself.
+
+* The Log is the Single Source of Truth (Event Sourcing)  
+  The application's state is not stored directly. The absolute source of truth is an immutable, append-only log of all events that have occurred. This ensures perfect data integrity and auditability.  
+* Logic is Formal and Predictable (State Machine Driven)  
+  The entire application is driven by a formal, central state machine to prevent impossible states and ensure predictable, robust logic. All application logic resides within the machine, not the UI.  
+* History is Never Deleted (Undo via Reversal)  
+  To "undo" an action, the original event is never deleted. Instead, a new reversal event is created that instructs the application to ignore or compensate for the original. The historical record must remain intact.  
+* Timers Must Be Infallible (Web Workers)  
+  All critical, real-time timing logic must be managed in a background thread (a Web Worker) to prevent timer drift and ensure perfect accuracy, even if the main application is busy or in a background tab.  
+* The Application Must Work Offline  
+  The application must be a fully offline-capable Progressive Web App (PWA). All necessary assets and data must be stored on the client to ensure it is 100% functional without an internet connection. (Note: PWA features like the service worker are to be implemented in the final polish phase).
+
+## **2\. User Experience (UX) Philosophy**
+
+These principles guide the design of the user interface and all user interactions.
+
+* The User is the Final Authority  
+  The application is a professional tool for a skilled operator. It will warn the user of potential rule infringements but must never block a user action. The final responsibility always lies with the AVAR.  
+* Design for High-Pressure Environments (Calm Design)  
+  The UI must be optimized for a high-pressure, rapid-input environment on a touch-first device. This means large tap targets, immediate visual feedback, and workflows designed to reduce cognitive load and minimize taps.  
+* All Data is Correctable  
+  The user must always have a clear and accessible way to edit or correct any logged event or piece of data. Mistakes are expected, and the system must be designed to accommodate their correction.

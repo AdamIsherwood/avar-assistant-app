@@ -1,0 +1,26 @@
+This document provides a high-level overview of the application's technical design and data flow. It serves as the primary blueprint for the software's structure. For specific implementation details, refer to the other documents in this docs folder.
+
+## **1\. Core Architectural Pattern: Event Sourcing with a State Machine**
+
+The application is built on a pure Event Sourcing architecture, orchestrated by a central state machine.
+
+* **State Machine (The "Brain")**: A single, comprehensive **XState machine** (src/machines/matchMachine.ts) serves as the central authority for all application logic. It manages the current state of the match (e.g., matchPhase), controls all timers, and processes all incoming events. The UI is a direct reflection of the machine's current state.  
+* **Event Log (The "Source of Truth")**: The application's state is not stored directly. The source of truth is an immutable, append-only log of all events that have occurred. This log is managed by the state machine and is persisted in the database.  
+* **Projections (The "Current State")**: The current state of the application is a "projection" calculated by replaying the event log. This ensures that the application's state is always consistent and auditable.
+
+## **2\. Key Technical Components**
+
+* **UI Layer (src/components/)**: The user interface is built with **React**. All components are "dumb" in the sense that they contain no business logic. Their only responsibilities are to display data from the state machine and send events back to it. All styling is handled by **Tailwind CSS**.  
+* **Timer System (src/workers/timerWorker.ts)**: All critical, real-time timers (main match clock, stoppage timer) are managed in a dedicated **Web Worker**. This ensures perfect accuracy by running them on a separate thread from the main UI. The state machine communicates with the worker as a spawned "actor."  
+* **Persistence Layer (src/db/database.ts)**: All events are persisted to the browser's **IndexedDB** using the **Dexie.js** library. This ensures the application is fully offline-capable and that no data is ever lost. The state machine is responsible for triggering the saving of events.
+
+## **3\. Data Flow Diagram**
+
+The flow of data in the application is a strict, unidirectional loop:
+
+1. **User Interaction**: The user interacts with a UI component (e.g., clicks a button).  
+2. **Event Dispatch**: The UI component sends a descriptive event (e.g., { type: 'NEXT' }) to the XState machine.  
+3. **State Transition**: The XState machine receives the event, processes it according to its logic, and updates its internal context.  
+4. **Side Effects**: The machine may trigger side effects, such as sending a command to the Web Worker or saving an event to the database.  
+5. **State Update**: The React UI, which is subscribed to the state machine, receives the new state.  
+6. **UI Re-render**: The UI components re-render to reflect the new state, and the loop waits for the next user interaction.

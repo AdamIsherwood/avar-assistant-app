@@ -1,0 +1,30 @@
+## **1\. Core Foundational Toolchain**
+
+This is the set of essential libraries and plugins that make our development environment and testing strategy possible.
+
+* **Build Tool**: **Vite (v5.x)** with the @vitejs/plugin-react-swc plugin for fast and modern React development.  
+* **Core Framework**: **React (v19.x)** for building the user interface.  
+* **Styling Engine**: **Tailwind CSS (v4.x)** integrated via the official @tailwindcss/vite plugin. This is the single source of truth for all styling.  
+* **State Management**: **XState (v5.x)** for managing all application logic and state transitions in a robust, predictable state machine.  
+* **Testing Framework**: **Vitest (v1.x)** for all unit and integration testing.  
+* **Test Environment**: We use the **jsdom** environment within Vitest to simulate a browser context for our tests.  
+* **Test Environment Mocking**:  
+  * **fake-indexeddb**: Used to provide a mock IndexedDB API, allowing us to test our database logic.  
+  * **@vitest/web-worker**: Used to provide a mock Web Worker API, allowing us to test our timer logic.
+
+## 2. The Automated Agent Workflow
+
+Our development process is driven by a custom-built, automated workflow orchestrated by Google Cloud. The primary agents are:
+
+* **The Listener (Cloud Function)**: A service that listens for a specific trigger (the `autocode` label on a GitHub Issue). It parses the task and securely passes it to the Orchestrator.
+* **The Orchestrator (Google Cloud Workflow)**: The "manager" of the assembly line. It fetches project documentation from the knowledge base, prepares a detailed prompt for the Coder, and passes the final code to the PR Creator.
+* **The Coder (Gemini API)**: The AI that generates the code based on the dynamic persona and task provided by the Orchestrator.
+* **The PR Creator (Cloud Function)**: A service that takes the generated code and automatically creates a new branch and Pull Request in the GitHub repository.
+
+## **3\. Future Integrations & Quality Gates**
+
+The following tools are part of our long-term plan and will be integrated in the final "Polish & Finalization" phase to ensure the highest standards of quality and security.
+
+* **Security Analysis (Snyk Code)**: Will be integrated to perform automated security vulnerability detection.  
+* **Quality Analysis (Codacy)**: Will be integrated to provide centralized code quality monitoring.  
+* **Architectural Visualization (PlantUML)**: Will be used to generate high-level architectural diagrams from our completed code.
