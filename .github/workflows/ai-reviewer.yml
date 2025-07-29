@@ -15,19 +15,21 @@ jobs:
   ai-review:
     runs-on: ubuntu-latest
     steps:
-      - name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          # THIS IS THE NEW, CORRECTED LINE:
-          audience: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-
+      # STEP 1: Check out the code first to set up the workspace.
       - name: 'Checkout code'
         uses: 'actions/checkout@v4'
         with:
           ref: ${{ github.head_ref }}
 
+      # STEP 2: Authenticate to Google Cloud.
+      - name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          audience: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+
+      # STEP 3: Set up the Google Cloud SDK.
       - name: 'Set up Google Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
 
