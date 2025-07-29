@@ -77,6 +77,12 @@ jobs:
                   "parts": [ { "text": $prompt } ]
                 }
               ],
+              "generationConfig": {
+                "maxOutputTokens": 2048,
+                "temperature": 0.2,
+                "topP": 0.8,
+                "topK": 40
+              },
               "safetySettings": [
                 {"category":"HARM_CATEGORY_HARASSMENT", "threshold":"BLOCK_NONE"},
                 {"category":"HARM_CATEGORY_HATE_SPEECH", "threshold":"BLOCK_NONE"},
@@ -85,7 +91,6 @@ jobs:
               ]
             }')
 
-          # This URL has been corrected to use a valid, stable model identifier.
           AI_RESPONSE_FULL=$(curl -X POST -s \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json; charset=utf-8" \
