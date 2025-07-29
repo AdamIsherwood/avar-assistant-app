@@ -15,33 +15,23 @@ jobs:
   ai-review:
     runs-on: ubuntu-latest
     steps:
-      # STEP 1: Check out the code first to set up the workspace.
       - name: 'Checkout code'
         uses: 'actions/checkout@v4'
         with:
           ref: ${{ github.head_ref }}
 
-      # STEP 2: Authenticate to Google Cloud.
-      - name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
+      # This single step now handles both authentication and SDK setup.
+      - name: 'Set up Google Cloud SDK and Authenticate'
+        uses: 'google-github-actions/setup-gcloud@v2'
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          audience: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-
-      # STEP 3: Set up the Google Cloud SDK.
-      - name: 'Set up Google Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+          # The 'audience' is no longer needed in this simplified setup.
 
       - name: 'Run AI Review'
         run: |
-          # This is a placeholder for the review script
-          # In a real scenario, this would call a script that:
-          # 1. Reads the changed files.
-          # 2. Calls the Vertex AI Search API to get context.
-          # 3. Calls the Gemini API with the code and context to get a review.
-          # 4. Formats the review as a comment.
-
+          # This is a placeholder for the review script.
+          # It will be replaced with the actual review logic later.
           REVIEW_COMMENT="This is a test comment from the AI Reviewer. The connection to Google Cloud is successful."
 
           gh pr comment ${{ github.event.pull_request.number }} --body "$REVIEW_COMMENT"
