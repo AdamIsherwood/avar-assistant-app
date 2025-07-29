@@ -108,7 +108,7 @@ jobs:
           else
             RAW_TEXT=$(echo "$AI_RESPONSE_FULL" | jq -r .candidates[0].content.parts[0].text)
             # Robustly strip markdown fences and clean up whitespace
-            CLEANED_TEXT=$(echo "$RAW_TEXT" | sed -e 's/^```json//' -e 's/^```//' -e 's/```$//' | xargs)
+           CLEANED_TEXT=$(echo "$RAW_TEXT" | sed -e '/^```/d' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
             
             # Validate that the result is valid JSON
             if echo "$CLEANED_TEXT" | jq empty 2>/dev/null; then
