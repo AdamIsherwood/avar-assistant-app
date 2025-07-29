@@ -56,6 +56,7 @@ jobs:
           Analyze the following code changes (git diff) and compare them against our project documentation context.
           Your response MUST be a single, valid JSON object with two keys: "reviewComment" (a string with your human-readable review) and "docUpdates" (an array of objects, each with "filePath" and "patch" keys).
           The "patch" value must be a valid diff patch that can be applied with 'git apply'. If no documentation changes are needed, return an empty array for "docUpdates".
+          Return ONLY a valid JSON object. Do NOT include any Markdown code fences, extra text, or explanations.
 
           CONTEXT:
           ---
@@ -101,12 +102,21 @@ jobs:
           echo "$AI_RESPONSE_FULL"
           echo "--- END RAW AI RESPONSE ---"
 
-          if ! echo "$AI_RESPONSE_FULL" | jq -e '.candidates' > /dev/null; then
-            echo "Error: AI response did not contain a 'candidates' field."
+          if ! echo "$AI_RESPONSE_FULL" | jq -e '.candidates[0].content.parts[0].text' > /dev/null; then
+            echo "Error: AI response did not contain the expected text field."
             AI_RESPONSE=""
           else
-            AI_RESPONSE=$(echo "$AI_RESPONSE_FULL" | jq -r .candidates[0].content.parts[0].text)
-            AI_RESPONSE=$(echo "$AI_RESPONSE" | sed 's/```json//g' | sed 's/```//g')
+            RAW_TEXT=$(echo "$AI_RESPONSE_FULL" | jq -r .candidates[0].content.parts[0].text)
+            # Robustly strip markdown fences and clean up whitespace
+            CLEANED_TEXT=$(echo "$RAW_TEXT" | sed -e 's/^```json//' -e 's/^```//' -e 's/```$//' | xargs)
+            
+            # Validate that the result is valid JSON
+            if echo "$CLEANED_TEXT" | jq empty 2>/dev/null; then
+              AI_RESPONSE="$CLEANED_TEXT"
+            else
+              echo "Error: Extracted AI response is not valid JSON."
+              AI_RESPONSE=""
+            fi
           fi
           
           # Use a heredoc for robust multi-line output
