@@ -1,96 +1,47 @@
 # .github/workflows/ai-reviewer.yml
 
-name: AI Code Reviewer
+name: AI Code Review
 
-# This action triggers on pull requests that are opened, reopened, or have new commits pushed.
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, synchronize]
 
-# Grant permissions for the workflow to read code and write comments on pull requests.
 permissions:
   contents: read
   pull-requests: write
-  id-token: write   # Add this line
+  id-token: write
 
 jobs:
-  ai_review:
+  ai-review:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Check out the repository code to access the changes.
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          # Fetch the entire history to allow the AI to compare branches.
-          fetch-depth: 0
-
-      # Step 2: Authenticate with Google Cloud.
-      # This is a crucial step for connecting to your Vertex AI and other services.
-      # You will need to set up Workload Identity Federation in your GCP project
-      # and add the corresponding secrets to your GitHub repository.
-      # See GCP docs: https://cloud.google.com/iam/docs/workload-identity-federation
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
+      - name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v2'
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }} # e.g., projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }} # e.g., my-service-account@my-project.iam.gserviceaccount.com
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          # THIS IS THE NEW, CORRECTED LINE:
+          audience: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
 
-      # Step 3: Get the code changes (diff) from the pull request.
-      # This diff is what we will send to the AI for review.
-      - name: Get Pull Request Diff
-        id: get_diff
-        run: |
-          # Compare the HEAD of the PR branch with the base branch.
-          git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} > pr.diff
-          echo "diff_path=pr.diff" >> $GITHUB_OUTPUT
-
-      # Step 4: Call Your AI Service for Review (THIS IS YOUR CUSTOM LOGIC)
-      # This is the core step where you connect to your existing Google Cloud workflow.
-      # You will replace the example script below with your own logic to:
-      #  1. Read the `pr.diff` file.
-      #  2. Send the diff and any other context (like the PR title/description) to your
-      #     Google Cloud Workflow or directly to the Gemini API.
-      #  3. Your AI service should use its RAG pipeline to get project context and generate a review.
-      #  4. The service should return the review text.
-      - name: Generate AI Review
-        id: ai_review_comment
-        run: |
-          # --- START OF PLACEHOLDER SCRIPT ---
-          # In a real scenario, you would use gcloud CLI, curl, or a client library here.
-          # This script just generates a placeholder review.
-          #
-          # EXAMPLE using a shell script to call a Cloud Function:
-          # REVIEW_TEXT=$(curl -X POST "https://your-cloud-function-url" \
-          #   -H "Authorization: bearer $(gcloud auth print-identity-token)" \
-          #   -H "Content-Type: application/json" \
-          #   --data-binary "@${{ steps.get_diff.outputs.diff_path }}")
-          #
-          # For now, we'll create a dummy review.
-          REVIEW_TEXT="### AI Review :robot:\n\n"
-          REVIEW_TEXT+="This is a placeholder review. **TODO:** Replace this script with a call to your actual AI service.\n\n"
-          REVIEW_TEXT+="**Analysis based on project principles:**\n"
-          REVIEW_TEXT+="*   **Event Sourcing**: The changes appear to correctly use reversal events instead of deleting history. :white_check_mark:\n"
-          REVIEW_TEXT+="*   **State Machine Driven**: All new logic seems to be correctly placed within the XState machine. :white_check_mark:\n\n"
-          REVIEW_TEXT+="**Suggestion:**\n"
-          REVIEW_TEXT+="*   Consider adding more detailed comments to the `timerWorker.ts` file.\n\n"
-          REVIEW_TEXT+="**Documentation Change Proposal:**\n"
-          REVIEW_TEXT+="*   Update `05-Technical-Architecture.md` to reflect the new timer logic."
-
-          # This is how we pass the review text to the next step.
-          echo "review_text<<EOF" >> $GITHUB_OUTPUT
-          echo "$REVIEW_TEXT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          # --- END OF PLACEHOLDER SCRIPT ---
-
-      # Step 5: Post the AI's review as a comment on the Pull Request.
-      - name: Post Review Comment
-        uses: actions/github-script@v7
+      - name: 'Checkout code'
+        uses: 'actions/checkout@v4'
         with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `${{ steps.ai_review_comment.outputs.review_text }}`
-            })
+          ref: ${{ github.head_ref }}
+
+      - name: 'Set up Google Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: 'Run AI Review'
+        run: |
+          # This is a placeholder for the review script
+          # In a real scenario, this would call a script that:
+          # 1. Reads the changed files.
+          # 2. Calls the Vertex AI Search API to get context.
+          # 3. Calls the Gemini API with the code and context to get a review.
+          # 4. Formats the review as a comment.
+
+          REVIEW_COMMENT="This is a test comment from the AI Reviewer. The connection to Google Cloud is successful."
+
+          gh pr comment ${{ github.event.pull_request.number }} --body "$REVIEW_COMMENT"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
