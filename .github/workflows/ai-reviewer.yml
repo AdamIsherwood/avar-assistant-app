@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  id-token: write   # Add this line
 
 jobs:
   ai_review:
