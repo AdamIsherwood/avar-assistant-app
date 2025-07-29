@@ -18,9 +18,7 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@v4'
         with:
-          # We need to fetch the full history to compare branches
           fetch-depth: 0 
-          # Checkout the PR branch
           ref: ${{ github.head_ref }}
 
       - name: 'Authenticate to Google Cloud'
@@ -51,7 +49,8 @@ jobs:
             "https://eu-discoveryengine.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/eu/dataStores/avar-assistant-app_1753569803517_gcs_store/servingConfigs/default_search:search" \
             -d "{\"query\": \"$SEARCH_QUERY\", \"pageSize\": 5}")
 
-          CONTEXT=$(echo "$SEARCH_RESULTS" | jq -r '.results[].document.derivedStructData.fields.content.stringValue' | paste -sd "\n---\n")
+          # This line is now resilient to empty search results
+          CONTEXT=$(echo "$SEARCH_RESULTS" | jq -r '.results[]?.document.derivedStructData.fields.content.stringValue' | paste -sd "\n---\n")
           
           PROMPT_TEXT=$(cat <<EOF
           You are an expert AI software architect reviewing a pull request.
@@ -71,14 +70,18 @@ jobs:
           EOF
           )
           
-          echo "$PROMPT_TEXT" > prompt.txt
-          
-          AI_RESPONSE=$(gcloud ai models predict gemini-1.5-pro-latest \
-            --project="${{ secrets.GCP_PROJECT_ID }}" \
-            --location="us-central1" \
-            --text-prompt-file="prompt.txt" \
-            --format="json" | jq -r .predictions[0].content)
+          # Prepare the JSON payload for the Vertex AI API
+          JSON_PAYLOAD=$(jq -n --arg prompt "$PROMPT_TEXT" \
+            '{ "instances": [ { "prompt": $prompt } ] }')
 
+          # Call the Vertex AI (Gemini) API directly using curl
+          AI_RESPONSE_FULL=$(curl -X POST -s \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/us-central1/publishers/google/models/gemini-1.5-pro-latest:predict" \
+            -d "$JSON_PAYLOAD")
+
+          AI_RESPONSE=$(echo "$AI_RESPONSE_FULL" | jq -r .predictions[0].content)
           AI_RESPONSE=$(echo "$AI_RESPONSE" | sed 's/```json//g' | sed 's/```//g')
           
           echo "ai_response_json=${AI_RESPONSE}" >> $GITHUB_OUTPUT
@@ -88,7 +91,6 @@ jobs:
         run: |
           AI_JSON='${{ steps.ai_review_step.outputs.ai_response_json }}'
           
-          # Check if the JSON is empty or doesn't contain a review comment
           if [[ -z "$AI_JSON" ]] || [[ "$(echo "$AI_JSON" | jq -r .reviewComment)" == "null" ]] || [[ -z "$(echo "$AI_JSON" | jq -r .reviewComment)" ]]; then
             echo "AI response is empty or invalid. Posting error message."
             gh pr comment ${{ github.event.pull_request.number }} --body "Error: The AI reviewer failed to generate a valid response. The AI_RESPONSE was empty or malformed."
@@ -103,7 +105,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: 'Apply Documentation Updates'
-        # Only run this step if the AI response was valid and contained updates
         if: steps.validate_and_post.outputs.is_valid == 'true' && fromJson(steps.ai_review_step.outputs.ai_response_json).docUpdates[0] != null
         run: |
           echo "Applying documentation updates..."
