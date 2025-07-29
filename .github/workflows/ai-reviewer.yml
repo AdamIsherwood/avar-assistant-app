@@ -43,7 +43,6 @@ jobs:
           SEARCH_QUERY="$PR_TITLE"
           ACCESS_TOKEN=$(gcloud auth print-access-token)
           
-          # This URL has been corrected.
           SEARCH_RESULTS=$(curl -X POST -s \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
@@ -86,10 +85,11 @@ jobs:
               ]
             }')
 
+          # This URL has been corrected to use a valid, stable model identifier.
           AI_RESPONSE_FULL=$(curl -X POST -s \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json; charset=utf-8" \
-            "https://us-central1-aiplatform.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/us-central1/publishers/google/models/gemini-1.5-pro-latest:generateContent" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/us-central1/publishers/google/models/gemini-1.5-pro-preview-0514:generateContent" \
             -d "$JSON_PAYLOAD")
           
           echo "--- RAW AI RESPONSE ---"
