@@ -47,17 +47,19 @@ jobs:
 
           # Use the PR title from the environment variable
           SEARCH_QUERY="$PR_TITLE"
+
+          # Get an access token for the API call
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
           
-          # Call Vertex AI Search to get relevant documentation context
-          SEARCH_RESULTS=$(gcloud discovery-engine search "$SEARCH_QUERY" \
-            --project="${{ secrets.GCP_PROJECT_ID }}" \
-            --location="eu" \
-            --data-store="avar-assistant-app_1753569803517_gcs_store" \
-            --serving-config="default_search" \
-            --format="json")
+          # Call the Vertex AI Search REST API directly using curl
+          SEARCH_RESULTS=$(curl -X POST -s \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://eu-discoveryengine.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/eu/dataStores/avar-assistant-app_1753569803517_gcs_store/servingConfigs/default_search:search" \
+            -d "{\"query\": \"$SEARCH_QUERY\", \"pageSize\": 5}")
 
           # Extract the content to build a clean context string
-          CONTEXT=$(echo "$SEARCH_RESULTS" | jq -r '.results[].document.derivedStructData.content' | paste -sd "\n---\n")
+          CONTEXT=$(echo "$SEARCH_RESULTS" | jq -r '.results[].document.derivedStructData.fields.content.stringValue' | paste -sd "\n---\n")
           
           # Prepare the detailed prompt for the Gemini API
           PROMPT_TEXT=$(cat <<EOF
