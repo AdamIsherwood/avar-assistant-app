@@ -1,5 +1,3 @@
-# .github/workflows/ai-reviewer.yml
-
 name: AI Code Review
 
 on:
@@ -18,7 +16,7 @@ jobs:
       - name: 'Checkout code'
         uses: 'actions/checkout@v4'
         with:
-          fetch-depth: 0 
+          fetch-depth: 0
           ref: ${{ github.head_ref }}
 
       - name: 'Authenticate to Google Cloud'
@@ -42,7 +40,7 @@ jobs:
           PR_DIFF=$(git diff origin/${{ github.base_ref }} ${{ github.head_ref }})
           SEARCH_QUERY="$PR_TITLE"
           ACCESS_TOKEN=$(gcloud auth print-access-token)
-          
+
           SEARCH_RESULTS=$(curl -X POST -s \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
@@ -50,7 +48,7 @@ jobs:
             -d "{\"query\": \"$SEARCH_QUERY\", \"pageSize\": 5}")
 
           CONTEXT=$(echo "$SEARCH_RESULTS" | jq -r '.results[]?.document.derivedStructData.fields.content.stringValue' | paste -sd "\n---\n")
-          
+
           PROMPT_TEXT=$(cat <<EOF
           You are an expert AI software architect reviewing a pull request.
           Analyze the following code changes (git diff) and compare them against our project documentation context.
@@ -62,14 +60,14 @@ jobs:
           ---
           ${CONTEXT}
           ---
-          
+
           GIT DIFF:
           ---
           ${PR_DIFF}
           ---
           EOF
           )
-          
+
           JSON_PAYLOAD=$(jq -n --arg prompt "$PROMPT_TEXT" \
             '{
               "contents": [
@@ -97,7 +95,7 @@ jobs:
             -H "Content-Type: application/json; charset=utf-8" \
             "https://us-central1-aiplatform.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/us-central1/publishers/google/models/gemini-2.5-pro:generateContent" \
             -d "$JSON_PAYLOAD")
-          
+
           echo "--- RAW AI RESPONSE ---"
           echo "$AI_RESPONSE_FULL"
           echo "--- END RAW AI RESPONSE ---"
@@ -106,8 +104,7 @@ jobs:
             echo "Error: AI response did not contain the expected text field."
             AI_RESPONSE=""
           else
-                        extract_json() {
-              # Accepts raw LLM output as stdin and prints cleaned JSON to stdout, or nothing if invalid.
+            extract_json() {
               awk '
                 BEGIN {injson=0; foundfence=0}
                 /^\s*```/ {
@@ -147,50 +144,7 @@ jobs:
               echo "${AI_RESPONSE}"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
-
-            fi
-            
-  # Accepts raw LLM output as stdin and prints cleaned JSON to stdout, or nothing if invalid.
-  awk '
-    BEGIN {injson=0; foundfence=0}
-    /^\s*```/ {
-      foundfence=1
-      if (injson==0) {injson=1; next}
-      else {injson=0; next}
-    }
-    injson==1 {print}
-    END {if (foundfence==0) exit 2}
-  ' | sed '/^\s*$/d' | xargs
-}
-
-RAW_TEXT=$(echo "$AI_RESPONSE_FULL" | jq -r .candidates[0].content.parts[0].text)
-
-# Validate JSON and output for GitHub Actions
-if echo "$CLEANED_TEXT" | jq empty 2>/dev/null; then
-  AI_RESPONSE="$CLEANED_TEXT"
-else
-  echo "Error: Extracted AI response is not valid JSON."
-  AI_RESPONSE=""
-  echo "--- DEBUG: RAW TEXT ---"
-  echo "$RAW_TEXT"
-  echo "--- DEBUG: CLEANED TEXT ---"
-  echo "$CLEANED_TEXT"
-fi
-
-{
-  echo "ai_response_json<<EOF"
-  echo "${AI_RESPONSE}"
-  echo "EOF"
-} >> "$GITHUB_OUTPUT"
-
           fi
-          
-          # Use a heredoc for robust multi-line output
-          {
-            echo "ai_response_json<<EOF"
-            echo "${AI_RESPONSE}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
 
       - name: 'Validate AI Response and Post Comment'
         id: validate_and_post
@@ -199,7 +153,7 @@ fi
           AI_RESPONSE_JSON: ${{ steps.ai_review_step.outputs.ai_response_json }}
         run: |
           AI_JSON="$AI_RESPONSE_JSON"
-          
+
           if [[ -z "$AI_JSON" ]] || [[ "$(echo "$AI_JSON" | jq -r .reviewComment)" == "null" ]] || [[ -z "$(echo "$AI_JSON" | jq -r .reviewComment)" ]]; then
             echo "AI response is empty or invalid. Posting error message."
             gh pr comment ${{ github.event.pull_request.number }} --body "Error: The AI reviewer failed to generate a valid response. The AI_RESPONSE was empty or malformed."
@@ -210,7 +164,7 @@ fi
             gh pr comment ${{ github.event.pull_request.number }} --body "$REVIEW_COMMENT"
             echo "is_valid=true" >> $GITHUB_OUTPUT
           fi
-      
+
       - name: 'Apply Documentation Updates'
         if: steps.validate_and_post.outputs.is_valid == 'true' && fromJson(steps.ai_review_step.outputs.ai_response_json).docUpdates[0] != null
         env:
@@ -219,13 +173,13 @@ fi
           echo "Applying documentation updates..."
           git config user.name "AVAR Assistant AI"
           git config user.email "ai-assistant@example.com"
-          
+
           echo "$AI_RESPONSE_JSON" | jq -c '.docUpdates[]' | while read -r update; do
             FILE_PATH=$(echo "$update" | jq -r .filePath)
             PATCH_CONTENT=$(echo "$update" | jq -r .patch)
             echo "Applying patch to ${FILE_PATH}..."
             echo -e "${PATCH_CONTENT}" > doc_update.patch
-            
+
             if git apply --check doc_update.patch; then
               git apply doc_update.patch
               git add "${FILE_PATH}"
@@ -235,7 +189,7 @@ fi
             fi
             rm doc_update.patch
           done
-          
+
           if ! git diff --staged --quiet; then
             git commit -m "docs: AI-generated documentation updates"
             git push origin ${{ github.head_ref }}
