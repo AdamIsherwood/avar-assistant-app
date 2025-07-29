@@ -109,7 +109,12 @@ jobs:
             AI_RESPONSE=$(echo "$AI_RESPONSE" | sed 's/```json//g' | sed 's/```//g')
           fi
           
-          echo "ai_response_json=${AI_RESPONSE}" >> $GITHUB_OUTPUT
+          # Use a heredoc for robust multi-line output
+          {
+            echo "ai_response_json<<EOF"
+            echo "${AI_RESPONSE}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: 'Validate AI Response and Post Comment'
         id: validate_and_post
