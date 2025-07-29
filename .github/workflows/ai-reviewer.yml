@@ -14,21 +14,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 'Checkout code'
-        uses: 'actions/checkout@v4'
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.head_ref }}
 
       - name: 'Authenticate to Google Cloud'
         id: auth
-        uses: 'google-github-actions/auth@v2'
+        uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           audience: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
 
       - name: 'Set up Google Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+        uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
@@ -54,7 +54,7 @@ jobs:
           Analyze the following code changes (git diff) and compare them against our project documentation context.
           Your response MUST be a single, valid JSON object with two keys: "reviewComment" (a concise, human-readable review) and "docUpdates" (an array of objects, each with "filePath" and "patch" keys).
           The "patch" value must be a valid diff patch that can be applied with 'git apply'. If no documentation changes are needed, return an empty array for "docUpdates".
-          Keep your review as short as possible, but allow longer answers only if absolutely necessary for clarity.
+          Keep your response as short as possible, but allow longer answers only if absolutely needed.
           Return ONLY a valid JSON object. Do NOT include any Markdown code fences, extra text, or explanations.
 
           CONTEXT:
@@ -78,7 +78,7 @@ jobs:
                 }
               ],
               "generationConfig": {
-                "maxOutputTokens": 8192,
+                "maxOutputTokens": 2048,
                 "temperature": 0.2,
                 "topP": 0.8,
                 "topK": 40
@@ -106,35 +106,28 @@ jobs:
             AI_RESPONSE=""
           else
             extract_json() {
+              # Extracts JSON from code fences inside LLM output, or falls back to body
               awk '
-                BEGIN {injson=0; foundfence=0}
+                BEGIN {injson=0; found=0}
                 /^\s*```/ {
-                  foundfence=1
-                  if (injson==0) {injson=1; next}
+                  if (injson==0) {injson=1; found=1; next}
                   else {injson=0; next}
                 }
                 injson==1 {print}
-                END {if (foundfence==0) exit 2}
-              ' | sed '/^\s*$/d' | xargs
+                END {if (found==0) exit 2}
+              ' | sed '/^\s*$/d'
             }
 
             RAW_TEXT=$(echo "$AI_RESPONSE_FULL" | jq -r .candidates[0].content.parts[0].text)
+            CLEANED_TEXT=$(echo "$RAW_TEXT" | extract_json 2>/dev/null || echo "")
 
-            CLEANED_TEXT=$(echo "$RAW_TEXT" | extract_json 2>/dev/null)
             if [ -z "$CLEANED_TEXT" ]; then
-              CLEANED_TEXT=$(echo "$RAW_TEXT" | xargs)
+              CLEANED_TEXT="$RAW_TEXT"
             fi
 
-            # Optionally, check for likely truncation
-            if ! echo "$CLEANED_TEXT" | grep -q '}$'; then
-              echo "Error: AI response appears to have been truncated mid-JSON."
-              AI_RESPONSE=""
-              echo "--- DEBUG: RAW TEXT ---"
-              echo "$RAW_TEXT"
-              echo "--- DEBUG: CLEANED TEXT ---"
-              echo "$CLEANED_TEXT"
-            elif echo "$CLEANED_TEXT" | jq empty 2>/dev/null; then
-              AI_RESPONSE="$CLEANED_TEXT"
+            # Try to validate and compact JSON
+            if echo "$CLEANED_TEXT" | jq -c empty 2>/dev/null; then
+              AI_RESPONSE=$(echo "$CLEANED_TEXT" | jq -c .)
             else
               echo "Error: Extracted AI response is not valid JSON."
               AI_RESPONSE=""
@@ -158,7 +151,6 @@ jobs:
           AI_RESPONSE_JSON: ${{ steps.ai_review_step.outputs.ai_response_json }}
         run: |
           AI_JSON="$AI_RESPONSE_JSON"
-
           if [[ -z "$AI_JSON" ]] || [[ "$(echo "$AI_JSON" | jq -r .reviewComment)" == "null" ]] || [[ -z "$(echo "$AI_JSON" | jq -r .reviewComment)" ]]; then
             echo "AI response is empty or invalid. Posting error message."
             gh pr comment ${{ github.event.pull_request.number }} --body "Error: The AI reviewer failed to generate a valid response. The AI_RESPONSE was empty or malformed."
@@ -178,13 +170,11 @@ jobs:
           echo "Applying documentation updates..."
           git config user.name "AVAR Assistant AI"
           git config user.email "ai-assistant@example.com"
-
           echo "$AI_RESPONSE_JSON" | jq -c '.docUpdates[]' | while read -r update; do
             FILE_PATH=$(echo "$update" | jq -r .filePath)
             PATCH_CONTENT=$(echo "$update" | jq -r .patch)
             echo "Applying patch to ${FILE_PATH}..."
             echo -e "${PATCH_CONTENT}" > doc_update.patch
-
             if git apply --check doc_update.patch; then
               git apply doc_update.patch
               git add "${FILE_PATH}"
@@ -194,7 +184,6 @@ jobs:
             fi
             rm doc_update.patch
           done
-
           if ! git diff --staged --quiet; then
             git commit -m "docs: AI-generated documentation updates"
             git push origin ${{ github.head_ref }}
