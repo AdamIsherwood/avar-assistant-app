@@ -69,8 +69,19 @@ jobs:
           EOF
           )
           
+          # This JSON payload now includes safety settings to prevent the AI from blocking the response.
           JSON_PAYLOAD=$(jq -n --arg prompt "$PROMPT_TEXT" \
-            '{ "instances": [ { "prompt": $prompt } ] }')
+            '{
+              "instances": [ { "prompt": $prompt } ],
+              "parameters": {
+                "safetySettings": [
+                  {"category":"HARM_CATEGORY_HARASSMENT", "threshold":"BLOCK_NONE"},
+                  {"category":"HARM_CATEGORY_HATE_SPEECH", "threshold":"BLOCK_NONE"},
+                  {"category":"HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold":"BLOCK_NONE"},
+                  {"category":"HARM_CATEGORY_DANGEROUS_CONTENT", "threshold":"BLOCK_NONE"}
+                ]
+              }
+            }')
 
           AI_RESPONSE_FULL=$(curl -X POST -s \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -78,12 +89,10 @@ jobs:
             "https://us-central1-aiplatform.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/us-central1/publishers/google/models/gemini-1.5-pro-latest:predict" \
             -d "$JSON_PAYLOAD")
           
-          # --- DEBUGGING: Print the full raw response from the AI ---
           echo "--- RAW AI RESPONSE ---"
           echo "$AI_RESPONSE_FULL"
           echo "--- END RAW AI RESPONSE ---"
 
-          # Check if the response contains a valid prediction before trying to parse it
           if ! echo "$AI_RESPONSE_FULL" | jq -e '.predictions' > /dev/null; then
             echo "Error: AI response did not contain a 'predictions' field."
             AI_RESPONSE=""
