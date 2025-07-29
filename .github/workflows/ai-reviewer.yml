@@ -6,8 +6,10 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+# Permissions are updated to allow writing content (for the review comment)
+# and id-token (for authentication).
 permissions:
-  contents: write
+  contents: write # Changed from read to write to allow committing doc updates
   pull-requests: write
   id-token: write
 
@@ -17,135 +19,105 @@ jobs:
     steps:
       - name: 'Checkout code'
         uses: 'actions/checkout@v4'
+        # We need to fetch the full history to compare branches and apply diffs
         with:
+          fetch-depth: 0 
           ref: ${{ github.head_ref }}
 
-      # Step 1: Authenticate to Google Cloud. This configures the environment.
       - name: 'Authenticate to Google Cloud'
         id: auth
         uses: 'google-github-actions/auth@v2'
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          # Explicitly set the audience to match the workload identity provider.
           audience: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
 
-      # Step 2: Set up the Google Cloud SDK. It will automatically use the authentication
-      # from the previous step without needing any inputs.
       - name: 'Set up Google Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
 
-      - name: 'Generate AI Review and Doc Patch'
-        id: ai_review_data
+      - name: 'Generate Diff and Call AI'
+        id: ai_review_step
         run: |
-          # --- START OF PLACEHOLDER SCRIPT ---
-          # TODO: Replace this with your actual call to your Google Cloud AI service.
-          # Your service should accept the diff file ('pr.diff') and return JSON in the format below.
+          # Get the diff of the pull request
+          PR_DIFF=$(git diff origin/${{ github.base_ref }} ${{ github.head_ref }})
+
+          # Prepare the prompt for the Gemini API
+          # This is where we instruct the AI to return a JSON object
+          PROMPT_TEXT=$(cat <<EOF
+          You are an expert AI software architect reviewing a pull request.
+          Analyze the following code changes (git diff) and compare them against our project documentation.
+          Your response MUST be a single JSON object with two keys: "reviewComment" (a string with your human-readable review) and "docUpdates" (an array of objects, each with "filePath" and "patch" keys).
+          The "patch" value must be a valid diff patch that can be applied with the 'git apply' command. If no documentation changes are needed, return an empty array for "docUpdates".
+
+          CONTEXT (Project Documentation will be fetched here via RAG in a real implementation)
+          ---
+          [Placeholder for RAG context from Vertex AI Search]
+          ---
           
-          # Example of what the patch content should look like.
-          # The file paths (a/... b/...) must match the actual paths in your repo.
-          PATCH_CONTENT="--- a/06-Functional-Specification.txt\n+++ b/06-Functional-Specification.txt\n@@ -1,5 +1,6 @@\n ## Match Overview & Summary\n \n+*AI-GENERATED UPDATE: This line was added automatically.*\n To provide the AVAR with a clear, at-a-glance visual overview of all critical match information, a dedicated **\"Match Summary\"** module will be present on the main dashboard. This module is read-only and provides a live summary of the match state.\n"
-
-          # Use jq to safely construct the JSON output.
-          # This ensures that special characters in the patch are handled correctly.
-          JSON_OUTPUT=$(jq -n \
-            --arg comment "### AI Review :robot:\n\nThis review was successful. I have also generated and applied documentation updates directly to this PR." \
-            --arg patch "$PATCH_CONTENT" \
-            '{
-              "reviewComment": $comment,
-              "docPatch": $patch
-            }')
-
-          # This is how we pass the structured JSON data to the next steps.
-          echo "json_output<<EOF" >> $GITHUB_OUTPUT
-          echo "$JSON_OUTPUT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          # --- END OF PLACEHOLDER SCRIPT ---
-
-      - name: 'Get Pull Request Diff'
-        id: get_diff
-        run: |
-          # Compare the HEAD of the PR branch with the base branch to get the changes.
-          git fetch origin ${{ github.base_ref }} --depth=1
-          git diff origin/${{ github.base_ref }} > pr.diff
-          echo "diff_path=pr.diff" >> $GITHUB_OUTPUT
-
-       - name: 'Post Review Comment'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const ai_output = ${{ steps.ai_review_data.outputs.json_output }};
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: ai_output.reviewComment
-            });
-
-      - name: 'Apply Documentation Patch'
-        id: apply_patch
-        run: |
-          echo "Applying AI-generated documentation patch..."
-          # Extract the patch from the JSON output and save it to a file.
-          echo '${{ fromJson(steps.ai_review_data.outputs.json_output).docPatch }}' > doc_update.patch
+          GIT DIFF:
+          ---
+          ${PR_DIFF}
+          ---
+          EOF
+          )
           
-          # Check if the patch file has content before trying to apply it.
-          if [ -s doc_update.patch ]; then
-            # Apply the patch. `git apply` is the standard command for this.
-            git apply doc_update.patch
-            echo "patched=true" >> $GITHUB_OUTPUT
+          # Call the Gemini API (this is a placeholder for the actual gcloud command)
+          # The real command would pass the PROMPT_TEXT to the model
+          AI_RESPONSE='{
+            "reviewComment": "This is a great start. The new component follows our architectural principles. I have identified one section in `06 - Functional Specification.txt` that needs to be updated to reflect this new feature. I am applying the patch automatically.",
+            "docUpdates": [
+              {
+                "filePath": "Instructions/06 - Functional Specification.txt",
+                "patch": "--- a/Instructions/06 - Functional Specification.txt\n+++ b/Instructions/06 - Functional Specification.txt\n@@ -1,3 +1,5 @@\n+## New Feature Section\n+\n This is a new line added to the documentation automatically.\n ## **Match Overview & Summary**\n \n To provide the AVAR with a clear, at-a-glance visual overview of all critical match information, a dedicated **\"Match Summary\"** module will be present on the main dashboard. This module is read-only and provides a live summary of the match state."
+              }
+            ]
+          }'
+
+          # Use a heredoc to safely handle multiline JSON and set it as a GitHub Action output
+          cat <<EOF > ai_response.json
+          ${AI_RESPONSE}
+          EOF
+          echo "ai_response_json=$(cat ai_response.json | jq -c .)" >> $GITHUB_OUTPUT
+
+      - name: 'Post Review Comment'
+        run: |
+          REVIEW_COMMENT=$(echo '${{ steps.ai_review_step.outputs.ai_response_json }}' | jq -r .reviewComment)
+          gh pr comment ${{ github.event.pull_request.number }} --body "$REVIEW_COMMENT"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 'Apply Documentation Updates'
+        if: fromJson(steps.ai_review_step.outputs.ai_response_json).docUpdates[0] != null # Only run if there are updates
+        run: |
+          echo "Applying documentation updates..."
+          
+          # Configure Git
+          git config user.name "AVAR Assistant AI"
+          git config user.email "ai-assistant@example.com"
+          
+          # Loop through each documentation update from the AI's response
+          echo '${{ steps.ai_review_step.outputs.ai_response_json }}' | jq -c '.docUpdates[]' | while read -r update; do
+            FILE_PATH=$(echo "$update" | jq -r .filePath)
+            PATCH_CONTENT=$(echo "$update" | jq -r .patch)
+            
+            echo "Applying patch to ${FILE_PATH}..."
+            echo -e "${PATCH_CONTENT}" > doc_update.patch
+            
+            if git apply --check doc_update.patch; then
+              git apply doc_update.patch
+              git add "${FILE_PATH}"
+            else
+              echo "Error: Patch could not be applied cleanly."
+              # You could add more robust error handling here, like posting a failure comment
+              exit 1
+            fi
+            rm doc_update.patch
+          done
+          
+          # Commit and push the changes
+          if ! git diff --staged --quiet; then
+            git commit -m "docs: AI-generated documentation updates"
+            git push origin ${{ github.head_ref }}
           else
-            echo "No patch to apply."
-            echo "patched=false" >> $GITHUB_OUTPUT
+            echo "No documentation changes to commit."
           fi
-
-      - name: 'Commit and Push Documentation Changes'
-        if: steps.apply_patch.outputs.patched == 'true'
-        run: |
-          # Configure Git with a bot identity for the commit.
-          git config --global user.name 'AVAR Assistant AI'
-          git config --global user.email 'avar-assistant-ai@users.noreply.github.com'
-          
-          # Add all changed files, commit them, and push to the PR branch.
-          git add .
-          git commit -m "docs: AI-generated documentation updates"
-          git push- name: 'Post Review Comment'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const ai_output = ${{ steps.ai_review_data.outputs.json_output }};
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: ai_output.reviewComment
-            });
-
-      - name: 'Apply Documentation Patch'
-        id: apply_patch
-        run: |
-          echo "Applying AI-generated documentation patch..."
-          # Extract the patch from the JSON output and save it to a file.
-          echo '${{ fromJson(steps.ai_review_data.outputs.json_output).docPatch }}' > doc_update.patch
-          
-          # Check if the patch file has content before trying to apply it.
-          if [ -s doc_update.patch ]; then
-            # Apply the patch. `git apply` is the standard command for this.
-            git apply doc_update.patch
-            echo "patched=true" >> $GITHUB_OUTPUT
-          else
-            echo "No patch to apply."
-            echo "patched=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: 'Commit and Push Documentation Changes'
-        if: steps.apply_patch.outputs.patched == 'true'
-        run: |
-          # Configure Git with a bot identity for the commit.
-          git config --global user.name 'AVAR Assistant AI'
-          git config --global user.email 'avar-assistant-ai@users.noreply.github.com'
-          
-          # Add all changed files, commit them, and push to the PR branch.
-          git add .
-          git commit -m "docs: AI-generated documentation updates"
-          git push   
