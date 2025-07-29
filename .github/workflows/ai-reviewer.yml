@@ -6,10 +6,8 @@ on:
   pull_request:
     types: [opened, synchronize]
 
-# Permissions are updated to allow writing content (for the review comment)
-# and id-token (for authentication).
 permissions:
-  contents: write # Changed from read to write to allow committing doc updates
+  contents: write
   pull-requests: write
   id-token: write
 
@@ -19,9 +17,10 @@ jobs:
     steps:
       - name: 'Checkout code'
         uses: 'actions/checkout@v4'
-        # We need to fetch the full history to compare branches and apply diffs
         with:
+          # We need to fetch the full history to compare branches
           fetch-depth: 0 
+          # Checkout the PR branch
           ref: ${{ github.head_ref }}
 
       - name: 'Authenticate to Google Cloud'
@@ -34,24 +33,39 @@ jobs:
 
       - name: 'Set up Google Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      - name: 'Generate Diff and Call AI'
+      - name: 'Generate Diff, Fetch Context, and Call AI'
         id: ai_review_step
         run: |
-          # Get the diff of the pull request
+          # Get the diff of the pull request against the base branch
           PR_DIFF=$(git diff origin/${{ github.base_ref }} ${{ github.head_ref }})
 
-          # Prepare the prompt for the Gemini API
-          # This is where we instruct the AI to return a JSON object
+          # Use the PR title as the query for the documentation search
+          SEARCH_QUERY="${{ github.event.pull_request.title }}"
+          
+          # Call Vertex AI Search to get relevant documentation context
+          SEARCH_RESULTS=$(gcloud discovery-engine search "$SEARCH_QUERY" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --location="eu" \
+            --data-store="avar-assistant-app_1753569803517_gcs_store" \
+            --serving-config="default_search" \
+            --format="json")
+
+          # Extract the content to build a clean context string
+          CONTEXT=$(echo "$SEARCH_RESULTS" | jq -r '.results[].document.derivedStructData.content' | paste -sd "\n---\n")
+          
+          # Prepare the detailed prompt for the Gemini API
           PROMPT_TEXT=$(cat <<EOF
           You are an expert AI software architect reviewing a pull request.
-          Analyze the following code changes (git diff) and compare them against our project documentation.
-          Your response MUST be a single JSON object with two keys: "reviewComment" (a string with your human-readable review) and "docUpdates" (an array of objects, each with "filePath" and "patch" keys).
-          The "patch" value must be a valid diff patch that can be applied with the 'git apply' command. If no documentation changes are needed, return an empty array for "docUpdates".
+          Analyze the following code changes (git diff) and compare them against our project documentation context.
+          Your response MUST be a single, valid JSON object with two keys: "reviewComment" (a string with your human-readable review) and "docUpdates" (an array of objects, each with "filePath" and "patch" keys).
+          The "patch" value must be a valid diff patch that can be applied with 'git apply'. If no documentation changes are needed, return an empty array for "docUpdates".
 
-          CONTEXT (Project Documentation will be fetched here via RAG in a real implementation)
+          CONTEXT:
           ---
-          [Placeholder for RAG context from Vertex AI Search]
+          ${CONTEXT}
           ---
           
           GIT DIFF:
@@ -61,23 +75,21 @@ jobs:
           EOF
           )
           
-          # Call the Gemini API (this is a placeholder for the actual gcloud command)
-          # The real command would pass the PROMPT_TEXT to the model
-          AI_RESPONSE='{
-            "reviewComment": "This is a great start. The new component follows our architectural principles. I have identified one section in `06 - Functional Specification.txt` that needs to be updated to reflect this new feature. I am applying the patch automatically.",
-            "docUpdates": [
-              {
-                "filePath": "Instructions/06 - Functional Specification.txt",
-                "patch": "--- a/Instructions/06 - Functional Specification.txt\n+++ b/Instructions/06 - Functional Specification.txt\n@@ -1,3 +1,5 @@\n+## New Feature Section\n+\n This is a new line added to the documentation automatically.\n ## **Match Overview & Summary**\n \n To provide the AVAR with a clear, at-a-glance visual overview of all critical match information, a dedicated **\"Match Summary\"** module will be present on the main dashboard. This module is read-only and provides a live summary of the match state."
-              }
-            ]
-          }'
+          # Save the prompt to a file to pass it to gcloud
+          echo "$PROMPT_TEXT" > prompt.txt
+          
+          # Call the Gemini API via gcloud to get the AI's response
+          AI_RESPONSE=$(gcloud ai models predict gemini-1.5-pro-latest \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --location="us-central1" \
+            --text-prompt-file="prompt.txt" \
+            --format="json" | jq -r .predictions[0].content)
 
-          # Use a heredoc to safely handle multiline JSON and set it as a GitHub Action output
-          cat <<EOF > ai_response.json
-          ${AI_RESPONSE}
-          EOF
-          echo "ai_response_json=$(cat ai_response.json | jq -c .)" >> $GITHUB_OUTPUT
+          # Clean up any markdown code fences the AI might add to the JSON response
+          AI_RESPONSE=$(echo "$AI_RESPONSE" | sed 's/```json//g' | sed 's/```//g')
+          
+          # Set the final JSON response as a GitHub Action output
+          echo "ai_response_json=${AI_RESPONSE}" >> $GITHUB_OUTPUT
 
       - name: 'Post Review Comment'
         run: |
@@ -87,11 +99,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: 'Apply Documentation Updates'
-        if: fromJson(steps.ai_review_step.outputs.ai_response_json).docUpdates[0] != null # Only run if there are updates
+        # Only run this step if the AI provided any documentation updates
+        if: fromJson(steps.ai_review_step.outputs.ai_response_json).docUpdates[0] != null
         run: |
           echo "Applying documentation updates..."
-          
-          # Configure Git
           git config user.name "AVAR Assistant AI"
           git config user.email "ai-assistant@example.com"
           
@@ -99,22 +110,21 @@ jobs:
           echo '${{ steps.ai_review_step.outputs.ai_response_json }}' | jq -c '.docUpdates[]' | while read -r update; do
             FILE_PATH=$(echo "$update" | jq -r .filePath)
             PATCH_CONTENT=$(echo "$update" | jq -r .patch)
-            
             echo "Applying patch to ${FILE_PATH}..."
             echo -e "${PATCH_CONTENT}" > doc_update.patch
             
+            # Apply the patch and add the file to the staging area
             if git apply --check doc_update.patch; then
               git apply doc_update.patch
               git add "${FILE_PATH}"
             else
               echo "Error: Patch could not be applied cleanly."
-              # You could add more robust error handling here, like posting a failure comment
               exit 1
             fi
             rm doc_update.patch
           done
           
-          # Commit and push the changes
+          # Commit and push the documentation changes back to the PR branch
           if ! git diff --staged --quiet; then
             git commit -m "docs: AI-generated documentation updates"
             git push origin ${{ github.head_ref }}
