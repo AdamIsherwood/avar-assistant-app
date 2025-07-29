@@ -27,6 +27,8 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          # Explicitly set the audience to match the workload identity provider.
+          audience: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
 
       # Step 2: Set up the Google Cloud SDK. It will automatically use the authentication
       # from the previous step without needing any inputs.
