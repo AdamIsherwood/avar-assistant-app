@@ -46,58 +46,46 @@ jobs:
           SEARCH_RESULTS=$(curl -X POST -s \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
-            "https://eu-discoveryengine.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/eu/dataStores/avar-assistant-app_1753569803517_gcs_store/servingConfigs/default_search:search" \
-            -d "{\"query\": \"$SEARCH_QUERY\", \"pageSize\": 5}")
-
-          CONTEXT=$(echo "$SEARCH_RESULTS" | jq -r '.results[]?.document.derivedStructData.fields.content.stringValue' | paste -sd "\n---\n")
-          
-          PROMPT_TEXT=$(cat <<EOF
-          You are an expert AI software architect reviewing a pull request.
-          Analyze the following code changes (git diff) and compare them against our project documentation context.
-          Your response MUST be a single, valid JSON object with two keys: "reviewComment" (a string with your human-readable review) and "docUpdates" (an array of objects, each with "filePath" and "patch" keys).
-          The "patch" value must be a valid diff patch that can be applied with 'git apply'. If no documentation changes are needed, return an empty array for "docUpdates".
-
-          CONTEXT:
-          ---
-          ${CONTEXT}
-          ---
-          
-          GIT DIFF:
-          ---
+            "https://eu-discoveryengine.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/eu/dataStores/avar-assistant-app_1---
           ${PR_DIFF}
           ---
           EOF
           )
           
-          # This JSON payload now includes safety settings to prevent the AI from blocking the response.
+          # This JSON payload is now structured for the generateContent endpoint
           JSON_PAYLOAD=$(jq -n --arg prompt "$PROMPT_TEXT" \
             '{
-              "instances": [ { "prompt": $prompt } ],
-              "parameters": {
-                "safetySettings": [
-                  {"category":"HARM_CATEGORY_HARASSMENT", "threshold":"BLOCK_NONE"},
-                  {"category":"HARM_CATEGORY_HATE_SPEECH", "threshold":"BLOCK_NONE"},
-                  {"category":"HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold":"BLOCK_NONE"},
-                  {"category":"HARM_CATEGORY_DANGEROUS_CONTENT", "threshold":"BLOCK_NONE"}
-                ]
-              }
+              "contents": [
+                {
+                  "role": "user",
+                  "parts": [ { "text": $prompt } ]
+                }
+              ],
+              "safetySettings": [
+                {"category":"HARM_CATEGORY_HARASSMENT", "threshold":"BLOCK_NONE"},
+                {"category":"HARM_CATEGORY_HATE_SPEECH", "threshold":"BLOCK_NONE"},
+                {"category":"HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold":"BLOCK_NONE"},
+                {"category":"HARM_CATEGORY_DANGEROUS_CONTENT", "threshold":"BLOCK_NONE"}
+              ]
             }')
 
+          # Call the more robust generateContent endpoint
           AI_RESPONSE_FULL=$(curl -X POST -s \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json; charset=utf-8" \
-            "https://us-central1-aiplatform.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/us-central1/publishers/google/models/gemini-1.5-pro-latest:predict" \
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/us-central1/publishers/google/models/gemini-1.5-pro-latest:generateContent" \
             -d "$JSON_PAYLOAD")
           
           echo "--- RAW AI RESPONSE ---"
           echo "$AI_RESPONSE_FULL"
           echo "--- END RAW AI RESPONSE ---"
 
-          if ! echo "$AI_RESPONSE_FULL" | jq -e '.predictions' > /dev/null; then
-            echo "Error: AI response did not contain a 'predictions' field."
+          # Updated jq path for the new response structure
+          if ! echo "$AI_RESPONSE_FULL" | jq -e '.candidates' > /dev/null; then
+            echo "Error: AI response did not contain a 'candidates' field."
             AI_RESPONSE=""
           else
-            AI_RESPONSE=$(echo "$AI_RESPONSE_FULL" | jq -r .predictions[0].content)
+            AI_RESPONSE=$(echo "$AI_RESPONSE_FULL" | jq -r .candidates[0].content.parts[0].text)
             AI_RESPONSE=$(echo "$AI_RESPONSE" | sed 's/```json//g' | sed 's/```//g')
           fi
           
