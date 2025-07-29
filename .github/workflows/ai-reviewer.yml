@@ -7,7 +7,7 @@ on:
     types: [opened, synchronize]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
   id-token: write
 
@@ -35,12 +35,117 @@ jobs:
       - name: 'Set up Google Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
 
-      - name: 'Run AI Review'
+      - name: 'Generate AI Review and Doc Patch'
+        id: ai_review_data
         run: |
-          # This is a placeholder for the review script.
-          # It will be replaced with the actual review logic later.
-          REVIEW_COMMENT="This is a test comment from the AI Reviewer. The connection to Google Cloud is successful."
+          # --- START OF PLACEHOLDER SCRIPT ---
+          # TODO: Replace this with your actual call to your Google Cloud AI service.
+          # Your service should accept the diff file ('pr.diff') and return JSON in the format below.
+          
+          # Example of what the patch content should look like.
+          # The file paths (a/... b/...) must match the actual paths in your repo.
+          PATCH_CONTENT="--- a/06-Functional-Specification.txt\n+++ b/06-Functional-Specification.txt\n@@ -1,5 +1,6 @@\n ## Match Overview & Summary\n \n+*AI-GENERATED UPDATE: This line was added automatically.*\n To provide the AVAR with a clear, at-a-glance visual overview of all critical match information, a dedicated **\"Match Summary\"** module will be present on the main dashboard. This module is read-only and provides a live summary of the match state.\n"
 
-          gh pr comment ${{ github.event.pull_request.number }} --body "$REVIEW_COMMENT"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use jq to safely construct the JSON output.
+          # This ensures that special characters in the patch are handled correctly.
+          JSON_OUTPUT=$(jq -n \
+            --arg comment "### AI Review :robot:\n\nThis review was successful. I have also generated and applied documentation updates directly to this PR." \
+            --arg patch "$PATCH_CONTENT" \
+            '{
+              "reviewComment": $comment,
+              "docPatch": $patch
+            }')
+
+          # This is how we pass the structured JSON data to the next steps.
+          echo "json_output<<EOF" >> $GITHUB_OUTPUT
+          echo "$JSON_OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          # --- END OF PLACEHOLDER SCRIPT ---
+
+      - name: 'Get Pull Request Diff'
+        id: get_diff
+        run: |
+          # Compare the HEAD of the PR branch with the base branch to get the changes.
+          git fetch origin ${{ github.base_ref }} --depth=1
+          git diff origin/${{ github.base_ref }} > pr.diff
+          echo "diff_path=pr.diff" >> $GITHUB_OUTPUT
+
+       - name: 'Post Review Comment'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ai_output = ${{ steps.ai_review_data.outputs.json_output }};
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: ai_output.reviewComment
+            });
+
+      - name: 'Apply Documentation Patch'
+        id: apply_patch
+        run: |
+          echo "Applying AI-generated documentation patch..."
+          # Extract the patch from the JSON output and save it to a file.
+          echo '${{ fromJson(steps.ai_review_data.outputs.json_output).docPatch }}' > doc_update.patch
+          
+          # Check if the patch file has content before trying to apply it.
+          if [ -s doc_update.patch ]; then
+            # Apply the patch. `git apply` is the standard command for this.
+            git apply doc_update.patch
+            echo "patched=true" >> $GITHUB_OUTPUT
+          else
+            echo "No patch to apply."
+            echo "patched=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 'Commit and Push Documentation Changes'
+        if: steps.apply_patch.outputs.patched == 'true'
+        run: |
+          # Configure Git with a bot identity for the commit.
+          git config --global user.name 'AVAR Assistant AI'
+          git config --global user.email 'avar-assistant-ai@users.noreply.github.com'
+          
+          # Add all changed files, commit them, and push to the PR branch.
+          git add .
+          git commit -m "docs: AI-generated documentation updates"
+          git push- name: 'Post Review Comment'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ai_output = ${{ steps.ai_review_data.outputs.json_output }};
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: ai_output.reviewComment
+            });
+
+      - name: 'Apply Documentation Patch'
+        id: apply_patch
+        run: |
+          echo "Applying AI-generated documentation patch..."
+          # Extract the patch from the JSON output and save it to a file.
+          echo '${{ fromJson(steps.ai_review_data.outputs.json_output).docPatch }}' > doc_update.patch
+          
+          # Check if the patch file has content before trying to apply it.
+          if [ -s doc_update.patch ]; then
+            # Apply the patch. `git apply` is the standard command for this.
+            git apply doc_update.patch
+            echo "patched=true" >> $GITHUB_OUTPUT
+          else
+            echo "No patch to apply."
+            echo "patched=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 'Commit and Push Documentation Changes'
+        if: steps.apply_patch.outputs.patched == 'true'
+        run: |
+          # Configure Git with a bot identity for the commit.
+          git config --global user.name 'AVAR Assistant AI'
+          git config --global user.email 'avar-assistant-ai@users.noreply.github.com'
+          
+          # Add all changed files, commit them, and push to the PR branch.
+          git add .
+          git commit -m "docs: AI-generated documentation updates"
+          git push   
