@@ -20,16 +20,20 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
-      # Step 1: Authenticate to Google Cloud. This creates the credentials file.
+      # Step 1: Authenticate to Google Cloud and get the credentials file path.
       - name: 'Authenticate to Google Cloud'
+        id: auth # Add an ID to this step to reference its output.
         uses: 'google-github-actions/auth@v2'
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      # Step 2: Set up the Google Cloud SDK. This will now find and use the credentials.
+      # Step 2: Set up the Google Cloud SDK using the specific credentials file.
       - name: 'Set up Google Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          # Explicitly pass the path of the created credentials file.
+          credentials_file_path: ${{ steps.auth.outputs.credentials_file_path }}
 
       - name: 'Run AI Review'
         run: |
