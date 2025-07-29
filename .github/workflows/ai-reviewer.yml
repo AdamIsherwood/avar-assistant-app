@@ -20,13 +20,16 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
-      # This single step now handles both authentication and SDK setup.
-      - name: 'Set up Google Cloud SDK and Authenticate'
-        uses: 'google-github-actions/setup-gcloud@v2'
+      # Step 1: Authenticate to Google Cloud. This creates the credentials file.
+      - name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          # The 'audience' is no longer needed in this simplified setup.
+
+      # Step 2: Set up the Google Cloud SDK. This will now find and use the credentials.
+      - name: 'Set up Google Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
 
       - name: 'Run AI Review'
         run: |
