@@ -43,16 +43,33 @@ jobs:
           SEARCH_QUERY="$PR_TITLE"
           ACCESS_TOKEN=$(gcloud auth print-access-token)
           
+          # This URL has been corrected.
           SEARCH_RESULTS=$(curl -X POST -s \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
-            "https://eu-discoveryengine.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/eu/dataStores/avar-assistant-app_1---
+            "https://eu-discoveryengine.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/eu/dataStores/avar-assistant-app_1753569803517_gcs_store/servingConfigs/default_search:search" \
+            -d "{\"query\": \"$SEARCH_QUERY\", \"pageSize\": 5}")
+
+          CONTEXT=$(echo "$SEARCH_RESULTS" | jq -r '.results[]?.document.derivedStructData.fields.content.stringValue' | paste -sd "\n---\n")
+          
+          PROMPT_TEXT=$(cat <<EOF
+          You are an expert AI software architect reviewing a pull request.
+          Analyze the following code changes (git diff) and compare them against our project documentation context.
+          Your response MUST be a single, valid JSON object with two keys: "reviewComment" (a string with your human-readable review) and "docUpdates" (an array of objects, each with "filePath" and "patch" keys).
+          The "patch" value must be a valid diff patch that can be applied with 'git apply'. If no documentation changes are needed, return an empty array for "docUpdates".
+
+          CONTEXT:
+          ---
+          ${CONTEXT}
+          ---
+          
+          GIT DIFF:
+          ---
           ${PR_DIFF}
           ---
           EOF
           )
           
-          # This JSON payload is now structured for the generateContent endpoint
           JSON_PAYLOAD=$(jq -n --arg prompt "$PROMPT_TEXT" \
             '{
               "contents": [
@@ -69,7 +86,6 @@ jobs:
               ]
             }')
 
-          # Call the more robust generateContent endpoint
           AI_RESPONSE_FULL=$(curl -X POST -s \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json; charset=utf-8" \
@@ -80,7 +96,6 @@ jobs:
           echo "$AI_RESPONSE_FULL"
           echo "--- END RAW AI RESPONSE ---"
 
-          # Updated jq path for the new response structure
           if ! echo "$AI_RESPONSE_FULL" | jq -e '.candidates' > /dev/null; then
             echo "Error: AI response did not contain a 'candidates' field."
             AI_RESPONSE=""
