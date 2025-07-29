@@ -49,7 +49,6 @@ jobs:
             "https://eu-discoveryengine.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/eu/dataStores/avar-assistant-app_1753569803517_gcs_store/servingConfigs/default_search:search" \
             -d "{\"query\": \"$SEARCH_QUERY\", \"pageSize\": 5}")
 
-          # This line is now resilient to empty search results
           CONTEXT=$(echo "$SEARCH_RESULTS" | jq -r '.results[]?.document.derivedStructData.fields.content.stringValue' | paste -sd "\n---\n")
           
           PROMPT_TEXT=$(cat <<EOF
@@ -70,19 +69,28 @@ jobs:
           EOF
           )
           
-          # Prepare the JSON payload for the Vertex AI API
           JSON_PAYLOAD=$(jq -n --arg prompt "$PROMPT_TEXT" \
             '{ "instances": [ { "prompt": $prompt } ] }')
 
-          # Call the Vertex AI (Gemini) API directly using curl
           AI_RESPONSE_FULL=$(curl -X POST -s \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json; charset=utf-8" \
             "https://us-central1-aiplatform.googleapis.com/v1/projects/${{ secrets.GCP_PROJECT_ID }}/locations/us-central1/publishers/google/models/gemini-1.5-pro-latest:predict" \
             -d "$JSON_PAYLOAD")
+          
+          # --- DEBUGGING: Print the full raw response from the AI ---
+          echo "--- RAW AI RESPONSE ---"
+          echo "$AI_RESPONSE_FULL"
+          echo "--- END RAW AI RESPONSE ---"
 
-          AI_RESPONSE=$(echo "$AI_RESPONSE_FULL" | jq -r .predictions[0].content)
-          AI_RESPONSE=$(echo "$AI_RESPONSE" | sed 's/```json//g' | sed 's/```//g')
+          # Check if the response contains a valid prediction before trying to parse it
+          if ! echo "$AI_RESPONSE_FULL" | jq -e '.predictions' > /dev/null; then
+            echo "Error: AI response did not contain a 'predictions' field."
+            AI_RESPONSE=""
+          else
+            AI_RESPONSE=$(echo "$AI_RESPONSE_FULL" | jq -r .predictions[0].content)
+            AI_RESPONSE=$(echo "$AI_RESPONSE" | sed 's/```json//g' | sed 's/```//g')
+          fi
           
           echo "ai_response_json=${AI_RESPONSE}" >> $GITHUB_OUTPUT
 
