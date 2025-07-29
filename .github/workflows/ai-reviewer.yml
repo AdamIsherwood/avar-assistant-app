@@ -38,12 +38,15 @@ jobs:
 
       - name: 'Generate Diff, Fetch Context, and Call AI'
         id: ai_review_step
+        # Pass the PR title as an environment variable for safety
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           # Get the diff of the pull request against the base branch
           PR_DIFF=$(git diff origin/${{ github.base_ref }} ${{ github.head_ref }})
 
-          # Use the PR title as the query for the documentation search
-          SEARCH_QUERY="${{ github.event.pull_request.title }}"
+          # Use the PR title from the environment variable
+          SEARCH_QUERY="$PR_TITLE"
           
           # Call Vertex AI Search to get relevant documentation context
           SEARCH_RESULTS=$(gcloud discovery-engine search "$SEARCH_QUERY" \
