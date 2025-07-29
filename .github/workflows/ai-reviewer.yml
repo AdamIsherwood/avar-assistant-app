@@ -122,8 +122,34 @@ jobs:
 
             RAW_TEXT=$(echo "$AI_RESPONSE_FULL" | jq -r .candidates[0].content.parts[0].text)
 
+            # Try to extract JSON from code fences
+            CLEANED_TEXT=$(echo "$RAW_TEXT" | extract_json 2>/dev/null)
 
+            # If nothing was found inside code fences, fallback to raw (for LLMs that don't fence at all)
+            if [ -z "$CLEANED_TEXT" ]; then
+              CLEANED_TEXT=$(echo "$RAW_TEXT" | xargs)
+            fi
 
+            # Validate JSON and output for GitHub Actions
+            if echo "$CLEANED_TEXT" | jq empty 2>/dev/null; then
+              AI_RESPONSE="$CLEANED_TEXT"
+            else
+              echo "Error: Extracted AI response is not valid JSON."
+              AI_RESPONSE=""
+              echo "--- DEBUG: RAW TEXT ---"
+              echo "$RAW_TEXT"
+              echo "--- DEBUG: CLEANED TEXT ---"
+              echo "$CLEANED_TEXT"
+            fi
+
+            {
+              echo "ai_response_json<<EOF"
+              echo "${AI_RESPONSE}"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+
+            fi
+            
   # Accepts raw LLM output as stdin and prints cleaned JSON to stdout, or nothing if invalid.
   awk '
     BEGIN {injson=0; foundfence=0}
