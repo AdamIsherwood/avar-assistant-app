@@ -52,8 +52,9 @@ jobs:
           PROMPT_TEXT=$(cat <<EOF
           You are an expert AI software architect reviewing a pull request.
           Analyze the following code changes (git diff) and compare them against our project documentation context.
-          Your response MUST be a single, valid JSON object with two keys: "reviewComment" (a string with your human-readable review) and "docUpdates" (an array of objects, each with "filePath" and "patch" keys).
+          Your response MUST be a single, valid JSON object with two keys: "reviewComment" (a concise, human-readable review) and "docUpdates" (an array of objects, each with "filePath" and "patch" keys).
           The "patch" value must be a valid diff patch that can be applied with 'git apply'. If no documentation changes are needed, return an empty array for "docUpdates".
+          Keep your review as short as possible, but allow longer answers only if absolutely necessary for clarity.
           Return ONLY a valid JSON object. Do NOT include any Markdown code fences, extra text, or explanations.
 
           CONTEXT:
@@ -77,7 +78,7 @@ jobs:
                 }
               ],
               "generationConfig": {
-                "maxOutputTokens": 8192,
+                "maxOutputTokens": 4096,
                 "temperature": 0.2,
                 "topP": 0.8,
                 "topK": 40
@@ -119,16 +120,20 @@ jobs:
 
             RAW_TEXT=$(echo "$AI_RESPONSE_FULL" | jq -r .candidates[0].content.parts[0].text)
 
-            # Try to extract JSON from code fences
             CLEANED_TEXT=$(echo "$RAW_TEXT" | extract_json 2>/dev/null)
-
-            # If nothing was found inside code fences, fallback to raw (for LLMs that don't fence at all)
             if [ -z "$CLEANED_TEXT" ]; then
               CLEANED_TEXT=$(echo "$RAW_TEXT" | xargs)
             fi
 
-            # Validate JSON and output for GitHub Actions
-            if echo "$CLEANED_TEXT" | jq empty 2>/dev/null; then
+            # Optionally, check for likely truncation
+            if ! echo "$CLEANED_TEXT" | grep -q '}$'; then
+              echo "Error: AI response appears to have been truncated mid-JSON."
+              AI_RESPONSE=""
+              echo "--- DEBUG: RAW TEXT ---"
+              echo "$RAW_TEXT"
+              echo "--- DEBUG: CLEANED TEXT ---"
+              echo "$CLEANED_TEXT"
+            elif echo "$CLEANED_TEXT" | jq empty 2>/dev/null; then
               AI_RESPONSE="$CLEANED_TEXT"
             else
               echo "Error: Extracted AI response is not valid JSON."
