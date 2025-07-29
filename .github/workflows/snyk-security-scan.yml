@@ -1,0 +1,41 @@
+# .github/workflows/snyk-security-scan.yml
+
+name: Snyk Security Scan
+
+# This action triggers on pull requests targeting your main branch.
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  snyk-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Allow reading repository content.
+      security-events: write # Allow writing security findings to the Security tab.
+
+    steps:
+      # Step 1: Check out the repository code.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up your project's environment (e.g., Node.js).
+      # Your project uses Vite/React, so we'll set up Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # Use a current LTS version
+
+      # Step 3: Install your project's dependencies.
+      - name: Install dependencies
+        run: npm install # Or `yarn install` or `pnpm install`
+
+      # Step 4: Run the Snyk actions to scan the code.
+      # The action will automatically upload results to Snyk and GitHub Security tab.
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/node@master
+        continue-on-error: true # To prevent the build from failing on vulnerabilities.
+                               # Snyk will still report the issues. You can set this to 'false' to enforce a strict gate.
+        env:
+          # This is the secret token you'll get from your Snyk account.
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
