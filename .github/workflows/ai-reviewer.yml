@@ -19,6 +19,17 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.head_ref }}
 
+      - name: 'Prevent self-triggering loops'
+        # This step checks the author of the latest commit on the PR branch.
+        # If the commit was made by our bot, it stops the job.
+        run: |
+          AUTHOR=$(git log -1 --pretty=format:'%an')
+          echo "Last commit author: $AUTHOR"
+          if [ "$AUTHOR" = "AVAR Assistant AI" ]; then
+            echo "Commit was made by our AI bot. Skipping review to prevent a loop."
+            exit 78 # 78 is a special exit code for GitHub to skip the rest of the steps.
+          fi
+          
       - name: 'Authenticate to Google Cloud'
         id: auth
         uses: google-github-actions/auth@v2
