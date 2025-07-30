@@ -45,3 +45,6 @@ jobs:
           # in the GitHub repository, keeping everything perfectly clean.
           gcloud storage rsync Instructions gs://avar-assistant-app_1753569803517 --recursive --delete-unmatched-destination-objects
 
+      - name: Print OIDC Token
+        run: |
+          curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL"
