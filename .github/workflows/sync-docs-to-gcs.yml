@@ -22,6 +22,10 @@ jobs:
     steps:
       - name: 'Checkout code'
         uses: 'actions/checkout@v4'
+      
+      - name: Print OIDC Token
+        run: |
+          curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL"
 
       - name: 'Authenticate to Google Cloud'
         id: auth
@@ -44,7 +48,3 @@ jobs:
           # The -d flag also deletes any files in the bucket that are no longer
           # in the GitHub repository, keeping everything perfectly clean.
           gcloud storage rsync Instructions gs://avar-assistant-app_1753569803517 --recursive --delete-unmatched-destination-objects
-
-      - name: Print OIDC Token
-        run: |
-          curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL"
