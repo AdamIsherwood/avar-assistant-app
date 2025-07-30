@@ -46,4 +46,4 @@ jobs:
       - name: Sync files to Google Cloud Storage
         run: |
           echo "Syncing the Instructions folder to the GCS bucket..."
-          gcloud storage rsync Instructions gs://avar-assistant-app_1753569803517 --recursive --delete-unmatched-destination-objects
+          gcloud storage rsync Instructions gs://avar-assistant-app --recursive --delete-unmatched-destination-objects
