@@ -1,15 +1,11 @@
-# .github/workflows/sync-docs-to-gcs.yml
-
 name: Sync Documentation to GCS
 
-# This workflow triggers ONLY on a push to the main branch.
-# This means it will run every time you merge a pull request.
 on:
   push:
     branches:
       - main
     paths:
-      - 'Instructions/**' # Only run if files inside the Instructions folder change
+      - 'Instructions/**'
 
 permissions:
   contents: read
@@ -20,31 +16,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 'Checkout code'
-        uses: 'actions/checkout@v4'
-      
-      - name: Print OIDC Token
-        run: |
-          curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL"
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: 'Authenticate to Google Cloud'
+      - name: Print OIDC Token Audience
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken();
+            const [header, payload] = token.split('.').slice(0, 2).map(part => Buffer.from(part, 'base64').toString('utf8'));
+            console.log('OIDC Token header:', header);
+            console.log('OIDC Token payload:', payload);
+            const payloadObj = JSON.parse(payload);
+            console.log('OIDC Token Audience (aud):', payloadObj.aud);
+
+      - name: Authenticate to Google Cloud
         id: auth
-        uses: 'google-github-actions/auth@v2'
+        uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-      
-      - name: 'Set up Google Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      - name: 'Sync files to Google Cloud Storage'
+      - name: Sync files to Google Cloud Storage
         run: |
           echo "Syncing the Instructions folder to the GCS bucket..."
-          
-          # The 'rsync' command is perfect for this. It makes the destination
-          # (the GCS bucket) an exact mirror of the source (the local folder).
-          # The -d flag also deletes any files in the bucket that are no longer
-          # in the GitHub repository, keeping everything perfectly clean.
           gcloud storage rsync Instructions gs://avar-assistant-app_1753569803517 --recursive --delete-unmatched-destination-objects
